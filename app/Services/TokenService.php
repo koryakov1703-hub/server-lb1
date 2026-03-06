@@ -1,0 +1,233 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Models\Token;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Support\Str;
+
+class TokenService
+{
+    public function generateTokenPair(User $user, ?string $ip = null, ?string $userAgent = null): array
+    {
+        $accessTtl = (int) env('ACCESS_TOKEN_TTL', 60);
+        $refreshTtl = (int) env('REFRESH_TOKEN_TTL', 10080);
+
+        $maxActiveTokens = (int) env('MAX_ACTIVE_TOKENS', 5);
+
+        $activeTokens = Token::query()
+            ->where('user_id', $user->id)
+            ->whereNull('revoked_at')
+            ->where('access_expires_at', '>', now())
+            ->orderBy('created_at')
+            ->get();
+
+        if ($activeTokens->count() >= $maxActiveTokens) {
+            $oldestToken = $activeTokens->first();
+
+            if ($oldestToken !== null) {
+                $oldestToken->update([
+                    'revoked_at' => now(),
+                ]);
+            }
+        }
+        $now = Carbon::now();
+        $accessExpiresAt = $now->copy()->addMinutes($accessTtl);
+        $refreshExpiresAt = $now->copy()->addMinutes($refreshTtl);
+
+        $jti = (string) Str::uuid();
+        $refreshPlain = Str::random(64);
+
+        Token::create([
+            'user_id' => $user->id,
+            'jti' => $jti,
+            'refresh_hash' => hash('sha256', $refreshPlain),
+            'ip' => $ip,
+            'user_agent' => $userAgent,
+            'access_expires_at' => $accessExpiresAt,
+            'refresh_expires_at' => $refreshExpiresAt,
+        ]);
+
+        $accessToken = $this->buildSignedToken(
+            userId: $user->id,
+            jti: $jti,
+            expiresAt: $accessExpiresAt,
+            type: 'access'
+        );
+
+        $refreshToken = $this->buildSignedToken(
+            userId: $user->id,
+            jti: $jti,
+            expiresAt: $refreshExpiresAt,
+            type: 'refresh',
+            secretPart: $refreshPlain
+        );
+
+        return [
+            'access_token' => $accessToken,
+            'refresh_token' => $refreshToken,
+        ];
+    }
+
+    private function buildSignedToken(
+        int $userId,
+        string $jti,
+        Carbon $expiresAt,
+        string $type,
+        ?string $secretPart = null
+    ): string {
+        $payload = [
+            'uid' => $userId,
+            'jti' => $jti,
+            'exp' => $expiresAt->timestamp,
+            'type' => $type,
+        ];
+
+        if ($secretPart !== null) {
+            $payload['rnd'] = $secretPart;
+        }
+
+        $encodedPayload = base64_encode(json_encode($payload, JSON_UNESCAPED_UNICODE));
+        $signature = hash_hmac('sha256', $encodedPayload, env('TOKEN_SECRET', 'default_secret'));
+
+        return $encodedPayload . '.' . $signature;
+    }
+    public function parseAndValidateToken(string $token): ?array
+    {
+        $parts = explode('.', $token);
+
+        if (count($parts) !== 2) {
+            return null;
+        }
+
+        [$encodedPayload, $signature] = $parts;
+
+        $expectedSignature = hash_hmac(
+            'sha256',
+            $encodedPayload,
+            env('TOKEN_SECRET', 'default_secret')
+        );
+
+        if (!hash_equals($expectedSignature, $signature)) {
+            return null;
+        }
+
+        $payload = json_decode(base64_decode($encodedPayload), true);
+
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        if (!isset($payload['uid'], $payload['jti'], $payload['exp'], $payload['type'])) {
+            return null;
+        }
+
+        if ((int) $payload['exp'] < now()->timestamp) {
+            return null;
+        }
+
+        return $payload;
+    }
+    public function validateAccessToken(string $token): ?Token
+    {
+        $payload = $this->parseAndValidateToken($token);
+
+        if ($payload === null) {
+            return null;
+        }
+
+        if ($payload['type'] !== 'access') {
+            return null;
+        }
+
+        return Token::query()
+            ->where('jti', $payload['jti'])
+            ->whereNull('revoked_at')
+            ->where('access_expires_at', '>', now())
+            ->first();
+    }
+    public function resolveUserByAccessToken(string $token): ?\App\Models\User
+    {
+        $tokenModel = $this->validateAccessToken($token);
+
+        if ($tokenModel === null) {
+            return null;
+        }
+
+        return $tokenModel->user;
+    }
+    public function revokeAccessToken(string $token): bool
+    {
+        $tokenModel = $this->validateAccessToken($token);
+
+        if ($tokenModel === null) {
+            return false;
+        }
+
+        $tokenModel->update([
+            'revoked_at' => now(),
+        ]);
+
+        return true;
+    }
+    public function getActiveTokensForUser(\App\Models\User $user): \Illuminate\Database\Eloquent\Collection
+    {
+        return Token::query()
+            ->where('user_id', $user->id)
+            ->whereNull('revoked_at')
+            ->where('access_expires_at', '>', now())
+            ->orderByDesc('created_at')
+            ->get();
+    }
+    public function revokeAllTokensForUser(\App\Models\User $user): int
+    {
+        return Token::query()
+            ->where('user_id', $user->id)
+            ->whereNull('revoked_at')
+            ->update([
+                'revoked_at' => now(),
+            ]);
+    }
+    public function validateRefreshToken(string $token): ?Token
+    {
+        $payload = $this->parseAndValidateToken($token);
+
+        if ($payload === null) {
+            return null;
+        }
+
+        if ($payload['type'] !== 'refresh') {
+            return null;
+        }
+
+        if (!isset($payload['rnd'])) {
+            return null;
+        }
+
+        return Token::query()
+            ->where('jti', $payload['jti'])
+            ->where('refresh_hash', hash('sha256', $payload['rnd']))
+            ->whereNull('revoked_at')
+            ->whereNull('refresh_used_at')
+            ->where('refresh_expires_at', '>', now())
+            ->first();
+    }
+    public function markRefreshTokenAsUsed(Token $token): void
+    {
+        $token->update([
+            'refresh_used_at' => now(),
+        ]);
+    }
+    public function revokeAllTokensByTokenModel(Token $token): int
+    {
+        return Token::query()
+            ->where('user_id', $token->user_id)
+            ->whereNull('revoked_at')
+            ->update([
+                'revoked_at' => now(),
+            ]);
+    }
+}
