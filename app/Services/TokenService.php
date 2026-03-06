@@ -16,6 +16,24 @@ class TokenService
         $accessTtl = (int) env('ACCESS_TOKEN_TTL', 60);
         $refreshTtl = (int) env('REFRESH_TOKEN_TTL', 10080);
 
+        $maxActiveTokens = (int) env('MAX_ACTIVE_TOKENS', 5);
+
+        $activeTokens = Token::query()
+            ->where('user_id', $user->id)
+            ->whereNull('revoked_at')
+            ->where('access_expires_at', '>', now())
+            ->orderBy('created_at')
+            ->get();
+
+        if ($activeTokens->count() >= $maxActiveTokens) {
+            $oldestToken = $activeTokens->first();
+
+            if ($oldestToken !== null) {
+                $oldestToken->update([
+                    'revoked_at' => now(),
+                ]);
+            }
+        }
         $now = Carbon::now();
         $accessExpiresAt = $now->copy()->addMinutes($accessTtl);
         $refreshExpiresAt = $now->copy()->addMinutes($refreshTtl);
