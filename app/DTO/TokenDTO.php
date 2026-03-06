@@ -13,4 +13,14 @@ final readonly class TokenDTO
         public string $createdAt,
         public string $expiresAt
     ) {}
+    public function toArray(): array
+    {
+        return [
+            'jti' => $this->jti,
+            'ip' => $this->ip,
+            'user_agent' => $this->userAgent,
+            'created_at' => $this->createdAt,
+            'expires_at' => $this->expiresAt,
+        ];
+    }
 }

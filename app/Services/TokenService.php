@@ -141,4 +141,36 @@ class TokenService
 
         return $tokenModel->user;
     }
+    public function revokeAccessToken(string $token): bool
+    {
+        $tokenModel = $this->validateAccessToken($token);
+
+        if ($tokenModel === null) {
+            return false;
+        }
+
+        $tokenModel->update([
+            'revoked_at' => now(),
+        ]);
+
+        return true;
+    }
+    public function getActiveTokensForUser(\App\Models\User $user): \Illuminate\Database\Eloquent\Collection
+    {
+        return Token::query()
+            ->where('user_id', $user->id)
+            ->whereNull('revoked_at')
+            ->where('access_expires_at', '>', now())
+            ->orderByDesc('created_at')
+            ->get();
+    }
+    public function revokeAllTokensForUser(\App\Models\User $user): int
+    {
+        return Token::query()
+            ->where('user_id', $user->id)
+            ->whereNull('revoked_at')
+            ->update([
+                'revoked_at' => now(),
+            ]);
+    }
 }
