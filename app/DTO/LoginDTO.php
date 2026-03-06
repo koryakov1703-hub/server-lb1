@@ -7,7 +7,7 @@ namespace App\DTO;
 final readonly class LoginDTO
 {
     public function __construct(
-        public string $login,
+        public string $username,
         public string $password
     ) {}
 }
