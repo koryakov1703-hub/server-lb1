@@ -59,7 +59,7 @@ class AuthController extends Controller
     {
         $dto = $request->toDTO();
 
-        $user = User::query()->create([
+        $user = User::create([
             'name' => $dto->username,
             'email' => $dto->email,
             'password' => Hash::make($dto->password),
