@@ -195,6 +195,43 @@ class AuthController extends Controller
 
     public function refresh(Request $request): JsonResponse
     {
-        return response()->json(['message' => 'Not implemented yet'], 501);
+        $refreshToken = (string) $request->input('refresh_token');
+
+        if ($refreshToken === '') {
+            return response()->json([
+                'message' => 'Refresh token required'
+            ], 401);
+        }
+
+        $tokenModel = $this->tokenService->validateRefreshToken($refreshToken);
+
+        if ($tokenModel === null) {
+            return response()->json([
+                'message' => 'Invalid or expired refresh token'
+            ], 401);
+        }
+
+        $this->tokenService->markRefreshTokenAsUsed($tokenModel);
+
+        $user = $tokenModel->user;
+
+        $tokens = $this->tokenService->generateTokenPair(
+            $user,
+            $request->ip(),
+            $request->userAgent()
+        );
+
+        $response = new AuthSuccessDTO(
+            accessToken: $tokens['access_token'],
+            refreshToken: $tokens['refresh_token'],
+            user: new UserDTO(
+                id: $user->id,
+                username: $user->name,
+                email: $user->email,
+                birthday: (string) $user->birthday
+            )
+        );
+
+        return response()->json($response);
     }
 }

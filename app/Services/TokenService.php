@@ -173,4 +173,43 @@ class TokenService
                 'revoked_at' => now(),
             ]);
     }
+    public function validateRefreshToken(string $token): ?Token
+    {
+        $payload = $this->parseAndValidateToken($token);
+
+        if ($payload === null) {
+            return null;
+        }
+
+        if ($payload['type'] !== 'refresh') {
+            return null;
+        }
+
+        if (!isset($payload['rnd'])) {
+            return null;
+        }
+
+        return Token::query()
+            ->where('jti', $payload['jti'])
+            ->where('refresh_hash', hash('sha256', $payload['rnd']))
+            ->whereNull('revoked_at')
+            ->whereNull('refresh_used_at')
+            ->where('refresh_expires_at', '>', now())
+            ->first();
+    }
+    public function markRefreshTokenAsUsed(Token $token): void
+    {
+        $token->update([
+            'refresh_used_at' => now(),
+        ]);
+    }
+    public function revokeAllTokensByTokenModel(Token $token): int
+    {
+        return Token::query()
+            ->where('user_id', $token->user_id)
+            ->whereNull('revoked_at')
+            ->update([
+                'revoked_at' => now(),
+            ]);
+    }
 }
