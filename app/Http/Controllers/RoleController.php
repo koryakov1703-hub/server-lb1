@@ -98,7 +98,17 @@ class RoleController extends Controller
         return response()->json($result->toArray());
     }
 
-    public function destroy(Request $request, int $role): JsonResponse
+    public function destroy(int $role): JsonResponse
+    {
+        $roleModel = Role::withTrashed()->findOrFail($role);
+
+        $roleModel->forceDelete();
+
+        return response()->json([
+            'message' => 'Role deleted permanently'
+        ]);
+    }
+    public function softDelete(Request $request, int $role): JsonResponse
     {
         $roleModel = Role::query()
             ->whereNull('deleted_at')
@@ -111,7 +121,28 @@ class RoleController extends Controller
         $roleModel->delete();
 
         return response()->json([
-            'message' => 'Role deleted'
+            'message' => 'Role soft deleted'
         ]);
+    }
+
+    public function restore(int $role): JsonResponse
+    {
+        $roleModel = Role::withTrashed()->findOrFail($role);
+
+        $roleModel->update([
+            'deleted_by' => null,
+        ]);
+
+        $roleModel->restore();
+
+        $dto = new RoleDTO(
+            id: $roleModel->id,
+            name: $roleModel->name,
+            slug: $roleModel->slug,
+            description: $roleModel->description,
+            createdAt: (string) $roleModel->created_at
+        );
+
+        return response()->json($dto->toArray());
     }
 }

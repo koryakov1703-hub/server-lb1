@@ -98,7 +98,17 @@ class PermissionController extends Controller
         return response()->json($result->toArray());
     }
 
-    public function destroy(Request $request, int $permission): JsonResponse
+    public function destroy(int $permission): JsonResponse
+    {
+        $permissionModel = Permission::withTrashed()->findOrFail($permission);
+
+        $permissionModel->forceDelete();
+
+        return response()->json([
+            'message' => 'Permission deleted permanently'
+        ]);
+    }
+    public function softDelete(Request $request, int $permission): JsonResponse
     {
         $permissionModel = Permission::query()
             ->whereNull('deleted_at')
@@ -111,7 +121,27 @@ class PermissionController extends Controller
         $permissionModel->delete();
 
         return response()->json([
-            'message' => 'Permission deleted'
+            'message' => 'Permission soft deleted'
         ]);
+    }
+    public function restore(int $permission): JsonResponse
+    {
+        $permissionModel = Permission::withTrashed()->findOrFail($permission);
+
+        $permissionModel->update([
+            'deleted_by' => null,
+        ]);
+
+        $permissionModel->restore();
+
+        $dto = new PermissionDTO(
+            id: $permissionModel->id,
+            name: $permissionModel->name,
+            slug: $permissionModel->slug,
+            description: $permissionModel->description,
+            createdAt: (string) $permissionModel->created_at
+        );
+
+        return response()->json($dto->toArray());
     }
 }
