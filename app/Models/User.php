@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\PermissionRole;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -52,5 +53,14 @@ class User extends Authenticatable
             ->using(UserRole::class)
             ->withPivot('id', 'created_at', 'created_by', 'deleted_at', 'deleted_by')
             ->wherePivotNull('deleted_at');
+    }
+    public function hasPermission(string $permissionSlug): bool
+    {
+        return $this->roles()
+            ->whereHas('permissions', function ($query) use ($permissionSlug) {
+                $query->where('slug', $permissionSlug)
+                    ->whereNull('permission_role.deleted_at');
+            })
+            ->exists();
     }
 }

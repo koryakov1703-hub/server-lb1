@@ -37,6 +37,10 @@ class AuthTokenMiddleware
 
         $request->attributes->set('auth_user', $user);
 
+        $request->setUserResolver(function () use ($user) {
+            return $user;
+        });
+
         return $next($request);
     }
 }
