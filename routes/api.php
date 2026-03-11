@@ -23,7 +23,7 @@ Route::prefix('auth')->group(function () {
 
 Route::prefix('ref')->middleware('auth.token')->group(function () {
     Route::prefix('user')->group(function () {
-        Route::get('/{user}/story', [ChangeLogController::class, 'userStory']);
+        Route::get('/{user}/story', [ChangeLogController::class, 'userStory'])->middleware('permission:get-story-user');
         Route::get('/', [UserRoleController::class, 'users'])->middleware('permission:get-list-user');
         Route::get('/{user}/role', [UserRoleController::class, 'index'])->middleware('permission:read-user');
         Route::post('/{user}/role', [UserRoleController::class, 'attach'])->middleware('permission:update-user');
@@ -33,7 +33,7 @@ Route::prefix('ref')->middleware('auth.token')->group(function () {
     });
 
     Route::prefix('policy/role')->group(function () {
-        Route::get('/{role}/story', [ChangeLogController::class, 'roleStory']);
+        Route::get('/{role}/story', [ChangeLogController::class, 'roleStory'])->middleware('permission:get-story-role');
         Route::get('/', [RoleController::class, 'index'])->middleware('permission:get-list-role');
         Route::get('/{role}', [RoleController::class, 'show'])->middleware('permission:read-role');
         Route::post('/', [RoleController::class, 'store'])->middleware('permission:create-role');
@@ -44,7 +44,7 @@ Route::prefix('ref')->middleware('auth.token')->group(function () {
     });
 
     Route::prefix('policy/permission')->group(function () {
-        Route::get('/{permission}/story', [ChangeLogController::class, 'permissionStory']);
+        Route::get('/{permission}/story', [ChangeLogController::class, 'permissionStory'])->middleware('permission:get-story-permission');
         Route::get('/', [PermissionController::class, 'index'])->middleware('permission:get-list-permission');
         Route::get('/{permission}', [PermissionController::class, 'show'])->middleware('permission:read-permission');
         Route::post('/', [PermissionController::class, 'store'])->middleware('permission:create-permission');

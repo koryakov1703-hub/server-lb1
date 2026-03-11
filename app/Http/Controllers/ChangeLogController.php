@@ -26,7 +26,6 @@ class ChangeLogController extends Controller
         return $this->getStory(
             entityType: self::ENTITY_USER,
             entityId: $user->id,
-            requiredPermission: 'get-story-user',
         );
     }
 
@@ -38,7 +37,6 @@ class ChangeLogController extends Controller
         return $this->getStory(
             entityType: self::ENTITY_ROLE,
             entityId: $role->id,
-            requiredPermission: 'get-story-role',
         );
     }
 
@@ -50,26 +48,14 @@ class ChangeLogController extends Controller
         return $this->getStory(
             entityType: self::ENTITY_PERMISSION,
             entityId: $permission->id,
-            requiredPermission: 'get-story-permission',
         );
     }
 
     /**
      * Формирует историю изменений для указанной сущности.
      */
-    private function getStory(
-        string $entityType,
-        int $entityId,
-        string $requiredPermission,
-    ): JsonResponse {
-        $user = auth()->user();
-
-        if ($user === null || !method_exists($user, 'hasPermission') || !$user->hasPermission($requiredPermission)) {
-            return response()->json([
-                'error' => "Access denied. Required permission: {$requiredPermission}",
-            ], 403);
-        }
-
+    private function getStory(string $entityType, int $entityId): JsonResponse
+    {
         $logs = ChangeLog::query()
             ->where('entity_type', $entityType)
             ->where('entity_id', $entityId)
@@ -108,7 +94,14 @@ class ChangeLogController extends Controller
         $keys = array_unique(array_merge(array_keys($before), array_keys($after)));
 
         foreach ($keys as $key) {
-            if (in_array($key, ['password', 'remember_token'], true)) {
+            if (in_array($key, [
+                'password',
+                'remember_token',
+                'created_at',
+                'updated_at',
+                'deleted_at',
+                'deleted_by',
+            ], true)) {
                 continue;
             }
 
