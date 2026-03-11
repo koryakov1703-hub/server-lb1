@@ -6,22 +6,15 @@ use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\UserRoleController;
 use Illuminate\Support\Facades\Route;
-
-Route::prefix('auth')->group(function () {
-    Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/refresh', [AuthController::class, 'refresh']);
-
-    Route::middleware('auth.token')->group(function () {
-        Route::get('/me', [AuthController::class, 'me']);
-        Route::post('/out', [AuthController::class, 'out']);
-        Route::get('/tokens', [AuthController::class, 'tokens']);
-        Route::post('/out_all', [AuthController::class, 'outAll']);
-    });
-});
+use App\Http\Controllers\ChangeLogController;
 
 Route::prefix('ref')->middleware('auth.token')->group(function () {
+
+    Route::post('/changelog/{log}/restore', [ChangeLogController::class, 'restore'])
+        ->middleware('permission:update-role');
+
     Route::prefix('user')->group(function () {
+        Route::get('/{user}/story', [ChangeLogController::class, 'userStory'])->middleware('permission:get-story-user');
         Route::get('/', [UserRoleController::class, 'users'])->middleware('permission:get-list-user');
         Route::get('/{user}/role', [UserRoleController::class, 'index'])->middleware('permission:read-user');
         Route::post('/{user}/role', [UserRoleController::class, 'attach'])->middleware('permission:update-user');
@@ -31,6 +24,7 @@ Route::prefix('ref')->middleware('auth.token')->group(function () {
     });
 
     Route::prefix('policy/role')->group(function () {
+        Route::get('/{role}/story', [ChangeLogController::class, 'roleStory'])->middleware('permission:get-story-role');
         Route::get('/', [RoleController::class, 'index'])->middleware('permission:get-list-role');
         Route::get('/{role}', [RoleController::class, 'show'])->middleware('permission:read-role');
         Route::post('/', [RoleController::class, 'store'])->middleware('permission:create-role');
@@ -41,6 +35,7 @@ Route::prefix('ref')->middleware('auth.token')->group(function () {
     });
 
     Route::prefix('policy/permission')->group(function () {
+        Route::get('/{permission}/story', [ChangeLogController::class, 'permissionStory'])->middleware('permission:get-story-permission');
         Route::get('/', [PermissionController::class, 'index'])->middleware('permission:get-list-permission');
         Route::get('/{permission}', [PermissionController::class, 'show'])->middleware('permission:read-permission');
         Route::post('/', [PermissionController::class, 'store'])->middleware('permission:create-permission');
