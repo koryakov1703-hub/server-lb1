@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use Illuminate\Support\Facades\DB;
 use App\DTO\ChangeLogCollectionDTO;
 use App\DTO\ChangeLogDTO;
 use App\Models\ChangeLog;
@@ -119,5 +120,69 @@ class ChangeLogController extends Controller
         }
 
         return $changedFields;
+    }
+    /**
+     * Восстанавливает состояние сущности по записи лога.
+     */
+    public function restore(ChangeLog $log): JsonResponse
+    {
+        return DB::transaction(function () use ($log): JsonResponse {
+            $before = is_array($log->before) ? $log->before : [];
+
+            if ($before === []) {
+                return response()->json([
+                    'error' => 'Restore is not available for this log entry.',
+                ], 422);
+            }
+
+            $model = $this->resolveModel($log->entity_type, $log->entity_id);
+
+            if ($model === null) {
+                return response()->json([
+                    'error' => 'Entity not found for restore.',
+                ], 404);
+            }
+
+            $restoredAttributes = $this->filterRestorableAttributes($before);
+
+            $model->fill($restoredAttributes);
+            $model->save();
+
+            return response()->json([
+                'message' => 'Entity restored successfully.',
+                'entity_type' => $log->entity_type,
+                'entity_id' => $log->entity_id,
+            ]);
+        });
+    }
+    /**
+     * Определяет модель по типу сущности и идентификатору.
+     */
+    private function resolveModel(string $entityType, int $entityId): User|Role|Permission|null
+    {
+        return match ($entityType) {
+            self::ENTITY_USER => User::query()->find($entityId),
+            self::ENTITY_ROLE => Role::query()->find($entityId),
+            self::ENTITY_PERMISSION => Permission::query()->find($entityId),
+            default => null,
+        };
+    }
+
+    /**
+     * Исключает поля, которые не должны восстанавливаться напрямую.
+     */
+    private function filterRestorableAttributes(array $attributes): array
+    {
+        unset(
+            $attributes['id'],
+            $attributes['created_at'],
+            $attributes['updated_at'],
+            $attributes['deleted_at'],
+            $attributes['deleted_by'],
+            $attributes['password'],
+            $attributes['remember_token']
+        );
+
+        return $attributes;
     }
 }
